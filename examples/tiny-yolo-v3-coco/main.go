@@ -92,21 +92,16 @@ func main() {
 			return
 		}
 
-		err = model.SetTarget(labeledData["test"])
-		if err != nil {
-			fmt.Printf("Can't set []float32 as target due the error: %s\n", err.Error())
-			return
-		}
 		err = model.ActivateTrainingMode()
 		if err != nil {
 			fmt.Printf("Can't activate training mode due the error: %s\n", err.Error())
 			return
 		}
-		imgf32, err := GetFloat32Image(*imagePathStr, imgHeight, imgWidth)
-		if err != nil {
-			fmt.Printf("Can't read []float32 from image due the error: %s\n", err.Error())
-			return
-		}
+		// imgf32, err := GetFloat32Image(*imagePathStr, imgHeight, imgWidth)
+		// if err != nil {
+		// 	fmt.Printf("Can't read []float32 from image due the error: %s\n", err.Error())
+		// 	return
+		// }
 
 		solver := gorgonia.NewRMSPropSolver(gorgonia.WithLearnRate(0.00001))
 		modelOut := model.GetOutput()
@@ -134,7 +129,20 @@ func main() {
 		tm := G.NewTapeMachine(g, gorgonia.WithPrecompiled(prog, locMap), gorgonia.BindDualValues(model.learningNodes...))
 		defer tm.Close()
 
-		for i := 0; i < 4000; i++ {
+		iter := 0
+		for i := range labeledData {
+			filePath := fmt.Sprintf("%s/%s.jpg", *trainingFolder, i)
+
+			imgf32, err := GetFloat32Image(filePath, imgHeight, imgWidth)
+			if err != nil {
+				fmt.Printf("Can't read []float32 from image due the error: %s\n", err.Error())
+				return
+			}
+			err = model.SetTarget(labeledData[i])
+			if err != nil {
+				fmt.Printf("Can't set []float32 as target due the error: %s\n", err.Error())
+				return
+			}
 			image := tensor.New(tensor.WithShape(1, channels, imgHeight, imgWidth), tensor.Of(tensor.Float32), tensor.WithBacking(imgf32))
 			err = G.Let(input, image)
 			if err != nil {
@@ -146,22 +154,57 @@ func main() {
 				fmt.Printf("Can't run tape machine due the error: %s\n", err.Error())
 				return
 			}
-			if i == 15 {
+			if iter == 15 {
 				solver = gorgonia.NewRMSPropSolver(gorgonia.WithLearnRate(0.000001))
 			}
-			if i == 150 {
+			if iter == 150 {
 				solver = gorgonia.NewRMSPropSolver(gorgonia.WithLearnRate(0.0000001))
 			}
-			fmt.Printf("Training iteration #%d done in: %v\n", i, time.Since(st))
+			fmt.Printf("Training iteration #%d done in: %v\n", iter, time.Since(st))
 			fmt.Printf("\tCurrent costs are: %v\n", costs.Value())
-
 			err = solver.Step(gorgonia.NodesToValueGrads(model.learningNodes))
 			if err != nil {
 				fmt.Printf("Can't do solver.Step() in Training mode due the error: %s\n", err.Error())
 			}
 
 			tm.Reset()
+			iter++
 		}
+
+		// for i := 0; i < 4000; i++ {
+
+		// 	err = model.SetTarget(labeledData["test"])
+		// 	if err != nil {
+		// 		fmt.Printf("Can't set []float32 as target due the error: %s\n", err.Error())
+		// 		return
+		// 	}
+		// 	image := tensor.New(tensor.WithShape(1, channels, imgHeight, imgWidth), tensor.Of(tensor.Float32), tensor.WithBacking(imgf32))
+		// 	err = G.Let(input, image)
+		// 	if err != nil {
+		// 		fmt.Printf("Can't let input = []float32 due the error: %s\n", err.Error())
+		// 		return
+		// 	}
+		// 	st := time.Now()
+		// 	if err := tm.RunAll(); err != nil {
+		// 		fmt.Printf("Can't run tape machine due the error: %s\n", err.Error())
+		// 		return
+		// 	}
+		// 	if i == 15 {
+		// 		solver = gorgonia.NewRMSPropSolver(gorgonia.WithLearnRate(0.000001))
+		// 	}
+		// 	if i == 150 {
+		// 		solver = gorgonia.NewRMSPropSolver(gorgonia.WithLearnRate(0.0000001))
+		// 	}
+		// 	fmt.Printf("Training iteration #%d done in: %v\n", i, time.Since(st))
+		// 	fmt.Printf("\tCurrent costs are: %v\n", costs.Value())
+
+		// 	err = solver.Step(gorgonia.NodesToValueGrads(model.learningNodes))
+		// 	if err != nil {
+		// 		fmt.Printf("Can't do solver.Step() in Training mode due the error: %s\n", err.Error())
+		// 	}
+
+		// 	tm.Reset()
+		// }
 
 		return
 	default:
